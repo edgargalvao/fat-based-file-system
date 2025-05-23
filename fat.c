@@ -55,7 +55,48 @@ int fat_format(){
 
 // Prints debugging information about the file system (stub)
 void fat_debug(){
-	printf("depurando\n");
+	// superblock info
+	super aux_sb;
+	//why aux? we could possibly mess up the other operations if the global superblock variable was modified
+	ds_read(SUPER, (char*) &aux_sb);
+	printf("superblock:\n");
+	if (aux_sb.magic == MAGIC_N) {
+		printf("\tmagic is ok\n");
+		printf("\t%d blocks\n", aux_sb.number_blocks);
+		printf("\t%d block fat\n", aux_sb.n_fat_blocks);
+	} else {
+		printf("\tmagic is NOT ok\n");
+	}
+
+	//read fat. we must be able to debug the filesystem even if it is not mounted
+	unsigned int* aux_fat = malloc(sizeof(unsigned int) * aux_sb.number_blocks);
+	for (int i = 0; i < aux_sb.n_fat_blocks; i++) {
+		// read every row
+		ds_read(TABLE + i, (char*) (aux_fat + i * BLOCK_SIZE / sizeof(unsigned int)));
+	}
+
+	// read directory
+	dir_item aux_dir[N_ITEMS]; 
+	ds_read(DIR, (char*) aux_dir);
+
+	unsigned int block;
+	// loop through directory
+	for (int i = 0; i < N_ITEMS; i++) {
+		if (aux_dir[i].used) {
+			printf("File \"%s\":\n", aux_dir[i].name);
+			printf("\tsize: %u bytes\n", aux_dir[i].length);
+
+			printf("\tBlocks:");
+			block = aux_dir[i].first;
+			while (block != EOFF && block < aux_sb.number_blocks) {
+				printf(" %u", block);
+				block = aux_fat[block];
+			}
+			printf("\n");
+		}
+	}
+
+	free(aux_fat);
 }
 
 // Mounts the file system (stub)
