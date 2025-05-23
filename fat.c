@@ -101,7 +101,23 @@ void fat_debug(){
 
 // Mounts the file system (stub)
 int fat_mount(){
-  	return 0;
+  	// read superblock
+	ds_read(SUPER, (char*) &sb);
+	if (sb.magic == MAGIC_N) {
+		// bring FAT to memory
+		fat = malloc(sizeof(unsigned int) * sb.number_blocks);
+		for (int i = 0; i < sb.n_fat_blocks; i++) {
+			ds_read(TABLE + i, (char*) (fat + i * BLOCK_SIZE / sizeof(unsigned int)));
+		}
+
+		// bring DIR to memory
+		ds_read(DIR, (char*) dir);
+		// filesystem mounted successfully
+		mountState = 1;
+		return 1;
+	} else {
+		return 0;
+	}
 }
 
 // Creates a new file in the file system (stub)
