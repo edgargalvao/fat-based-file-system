@@ -50,6 +50,42 @@ int mountState = 0; // 1 if file system is mounted, 0 otherwise
 
 // Formats the file system (stub)
 int fat_format(){ 
+	if(mountState){//sistema ta montado, nao pode formatar
+		errno = EBUSY; 
+		return -1;
+	}
+
+	//inicializa o superbloco, sera q precisa ser variavel auxiliar?
+	super aux_sb;
+	aux_sb.magic = MAGIC_N;
+	aux_sb.number_blocks = ds_size();
+	aux_sb.n_fat_blocks = (int)ceil((float)aux_sb.number_blocks * sizeof(unsigned int) / BLOCK_SIZE);
+
+	//escreve o superbloco no disco
+	ds_write(SUPER, (char *)&aux_sb);
+
+	//inicializa o diretorio, macando as entradas como nao usadas
+	for(int i = 0; i < N_ITEMS; i++){
+		dir[i].used = 0;
+	}
+	ds_write(DIR, (char *)dir);
+
+	//inicializa a fat
+	fat = malloc(sizeof(unsigned int) * aux_sb.number_blocks);
+	if(!fat){
+		errno = ENOMEM;
+		return -1;
+	}
+	for(int i = 0; i < aux_sb.number_blocks; i++){
+		fat[i] = FREE;
+	}
+
+	//grava fat nos blocos correspondentes
+	for(int i = 0; i < aux_sb.n_fat_blocks; i ++){
+		ds_write(TABLE + i, (char *)(fat + 1 * BLOCK_SIZE / sizeof(unsigned int)));
+	}
+
+	free(fat);
   	return 0;
 }
 
@@ -101,6 +137,10 @@ void fat_debug(){
 
 // Mounts the file system (stub)
 int fat_mount(){
+	if(mountState == 1){//testa se ja estiver montado, se tiver vai dar falha na montagem
+		errno = EBUSY;
+		return -1;
+	}
   	// read superblock
 	ds_read(SUPER, (char*) &sb);
 	if (sb.magic == MAGIC_N) {
@@ -114,9 +154,9 @@ int fat_mount(){
 		ds_read(DIR, (char*) dir);
 		// filesystem mounted successfully
 		mountState = 1;
-		return 1;
-	} else {
 		return 0;
+	} else {
+		return 1;
 	}
 }
 
