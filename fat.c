@@ -56,7 +56,7 @@ int fat_format(){
 	}
 
 	//inicializa o superbloco, sera q precisa ser variavel auxiliar?
-	super aux_sb;
+	/*super aux_sb;
 	aux_sb.magic = MAGIC_N;
 	aux_sb.number_blocks = ds_size();
 	aux_sb.n_fat_blocks = (int)ceil((float)aux_sb.number_blocks * sizeof(unsigned int) / BLOCK_SIZE);
@@ -84,6 +84,45 @@ int fat_format(){
 	for(int i = 0; i < aux_sb.n_fat_blocks; i ++){
 		ds_write(TABLE + i, (char *)(fat + 1 * BLOCK_SIZE / sizeof(unsigned int)));
 	}
+
+	free(fat);
+  	return 0;*/
+
+	sb.magic = MAGIC_N;
+	sb.number_blocks = ds_size();
+	sb.n_fat_blocks = (int)ceil((float)sb.number_blocks * sizeof(unsigned int) / BLOCK_SIZE);
+
+	//escreve o superbloco no disco
+	ds_write(SUPER, (char *)&sb);
+
+	//inicializa o diretorio, macando as entradas como nao usadas
+	for(int i = 0; i < N_ITEMS; i++){
+		dir[i].used = 0;
+	}
+	ds_write(DIR, (char *)dir);
+
+	//inicializa a fat
+	fat = malloc(sizeof(unsigned int) * sb.number_blocks);
+	if(!fat){
+		errno = ENOMEM;
+		return -1;
+	}
+	for(int i = 0; i < sb.number_blocks; i++){
+		fat[i] = FREE;
+	}
+
+	//grava fat nos blocos correspondentes
+	for(int i = 0; i < sb.n_fat_blocks; i ++){
+		ds_write(TABLE + i, (char *)(fat + i * BLOCK_SIZE / sizeof(unsigned int)));
+	}
+	/*char fat_buffer[BLOCK_SIZE];//assim funciona tambem
+	int entries_per_block = BLOCK_SIZE / sizeof(unsigned int);
+
+	for (int i = 0; i < sb.n_fat_blocks; i++) {
+		memcpy(fat_buffer, fat + i * entries_per_block, BLOCK_SIZE);
+		ds_write(TABLE + i, fat_buffer);
+	}*/
+
 
 	free(fat);
   	return 0;
@@ -154,10 +193,13 @@ int fat_mount(){
 		ds_read(DIR, (char*) dir);
 		// filesystem mounted successfully
 		mountState = 1;
+		//free(fat);
 		return 0;
 	} else {
+		errno = EINVAL;
 		return 1;
 	}
+	
 }
 
 // Creates a new file in the file system (stub)
@@ -221,7 +263,16 @@ int fat_create(char *name){
 	ds_write(DIR, (char *)dir); // Write directory to disk
 	for (int i = 0; i < sb.n_fat_blocks; i++) {
 		ds_write(TABLE + i, (char *)(fat + i * BLOCK_SIZE / sizeof(unsigned int))); // Write FAT blocks to disk
-	}	
+	}
+	
+	/*char fat_buffer[BLOCK_SIZE];//assim funciona tambem
+	int entries_per_block = BLOCK_SIZE / sizeof(unsigned int);
+
+	for (int i = 0; i < sb.n_fat_blocks; i++) {
+		memcpy(fat_buffer, fat + i * entries_per_block, BLOCK_SIZE);
+		ds_write(TABLE + i, fat_buffer);
+	}*/
+
 
 	
 	return 0;
@@ -229,6 +280,58 @@ int fat_create(char *name){
 
 // Deletes a file from the file system (stub)
 int fat_delete( char *name){
+	//Check if file system is mounted
+	if(!mountState) {
+		errno = EINVAL;
+		return -1;
+	}
+
+	// Check for valid name
+	if(!name || strlen(name) > MAX_LETTERS) {
+		errno = EINVAL;
+		return -1;
+	}
+
+	//procura o arquivo no diretorio
+	int arq_encontrado = -1;
+	for(int i = 0; i < N_ITEMS; i++) {
+		if(dir[i].used && strcmp(dir[i].name, name) == 0) {
+			arq_encontrado = i;
+			break;
+		}
+	}
+	if(arq_encontrado == -1){
+		errno = ENOENT;//arquivo não encontrado
+		return -1;
+	}
+
+	//libera blocos da fat
+	unsigned int aux = dir[arq_encontrado].first;//começa no primeiro bloco do arquivo
+	while(aux != EOFF && aux < sb.number_blocks){
+		unsigned int prox = fat[aux];//pega o indica do proximo bloco do arquivo guardado no fat
+		fat[aux] = FREE;
+		aux = prox;//passa para o proximo bloco
+	}
+
+	//marca a entrada do diretorio como livre
+	dir[arq_encontrado].used = 0;
+
+	//escreve a fat e o diretorio no disco
+	//garante que as alteracoes na ram sejam feitas no disco tbm
+	for(int i = 0; i < sb.n_fat_blocks; i++){
+		ds_write(TABLE + i, (char *)(fat + i * BLOCK_SIZE / sizeof(unsigned int)));
+	}
+	/*char fat_buffer[BLOCK_SIZE];//assim funciona tambem
+	int entries_per_block = BLOCK_SIZE / sizeof(unsigned int);
+
+	for (int i = 0; i < sb.n_fat_blocks; i++) {
+		memcpy(fat_buffer, fat + i * entries_per_block, BLOCK_SIZE);
+		ds_write(TABLE + i, fat_buffer);
+	}*/
+
+	ds_write(DIR, (char *)dir);
+
+
   	return 0;
 }
 
