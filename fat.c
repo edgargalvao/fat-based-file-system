@@ -57,7 +57,7 @@ int fat_format(){
 
 	sb.magic = MAGIC_N;
 	sb.number_blocks = ds_size();
-	sb.n_fat_blocks = (int)ceil(sb.number_blocks * sizeof(unsigned int) / BLOCK_SIZE);
+	sb.n_fat_blocks = (int)ceil((float)sb.number_blocks * sizeof(unsigned int) / BLOCK_SIZE);
 
 	//escreve o superbloco no disco
 	ds_write(SUPER, (char *)&sb);
@@ -376,6 +376,7 @@ int fat_read( char *name, char *buff, int length, int offset){//ASSIM A SÓ VAI 
 	unsigned int current = dir[arq_encontrado].first; // bloco atual
 	int skip_blocks = offset / BLOCK_SIZE; // blocos para pular
 	int block_offset = offset % BLOCK_SIZE; // offset para leitura
+	
 
 	// ir para o offset
 	for (int i = 0; i < skip_blocks; i++) {
